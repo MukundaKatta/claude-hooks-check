@@ -1,0 +1,41 @@
+name: "claude-hooks-check"
+description: "Lint Claude Code hooks configuration. Catches typos, dangerous commands, and leaked secrets before Claude runs them."
+author: "Mukunda Katta"
+
+branding:
+  icon: "alert-triangle"
+  color: "red"
+
+inputs:
+  paths:
+    description: "Paths to settings.json or standalone hooks JSON files. Multiple space-separated values allowed."
+    required: true
+  quiet:
+    description: "Only print errors (hide OK lines and warnings)."
+    required: false
+    default: "false"
+  python-version:
+    description: "Python version to set up for the action."
+    required: false
+    default: "3.12"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install claude-hooks-check
+      shell: bash
+      run: pip install --quiet claude-hooks-check
+
+    - name: Run claude-hooks-check
+      shell: bash
+      run: |
+        args=""
+        if [ "${{ inputs.quiet }}" = "true" ]; then
+          args="--quiet"
+        fi
+        claude-hooks-check $args ${{ inputs.paths }}
