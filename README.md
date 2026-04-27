@@ -72,6 +72,19 @@ for issue in result.errors:
 | W054 | warning | matcher block has empty `hooks` array |
 | W105 | warning | `timeout` over one hour |
 
+## Use as a GitHub Action
+
+Add this step to any workflow:
+
+```yaml
+- uses: actions/checkout@v5
+- uses: MukundaKatta/claude-hooks-check@v1
+  with:
+    paths: .claude/settings.json
+```
+
+Pass multiple files space-separated (e.g. `paths: .claude/settings.json .claude/settings.local.json`). The action runs the same checks as the CLI and fails the workflow on any errors. Inputs: `paths` (required), `quiet` (default `false`), `python-version` (default `3.12`).
+
 ## License
 
 MIT
