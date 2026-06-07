@@ -9,6 +9,7 @@ from claude_hooks_check.validator import (
     Severity,
     validate_hooks_file,
     validate_hooks_source,
+    validate_settings_file,
 )
 
 
@@ -53,7 +54,10 @@ def test_bare_event_root_accepted() -> None:
     # Some users save just the hooks dict, not wrapped in {"hooks": ...}
     cfg = {
         "PostToolUse": [
-            {"matcher": "Edit", "hooks": [{"type": "command", "command": "prettier -w $FILE"}]}
+            {
+                "matcher": "Edit",
+                "hooks": [{"type": "command", "command": "prettier -w $FILE"}],
+            }
         ]
     }
     result = validate_hooks_source(json.dumps(cfg))
@@ -93,9 +97,7 @@ def test_matcher_block_missing_hooks() -> None:
 
 def test_hook_missing_type() -> None:
     cfg = {
-        "hooks": {
-            "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "echo x"}]}]
-        }
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "echo x"}]}]}
     }
     result = validate_hooks_source(json.dumps(cfg))
     assert "E102" in _codes(result.errors)
@@ -115,11 +117,7 @@ def test_unknown_hook_type() -> None:
 
 def test_command_hook_missing_command() -> None:
     cfg = {
-        "hooks": {
-            "PreToolUse": [
-                {"matcher": "Bash", "hooks": [{"type": "command"}]}
-            ]
-        }
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command"}]}]}
     }
     result = validate_hooks_source(json.dumps(cfg))
     assert "E104" in _codes(result.errors)
@@ -191,9 +189,7 @@ def test_timeout_must_be_positive_int() -> None:
     cfg = {
         "hooks": {
             "PreToolUse": [
-                {
-                    "hooks": [{"type": "command", "command": "echo x", "timeout": -1}]
-                }
+                {"hooks": [{"type": "command", "command": "echo x", "timeout": -1}]}
             ]
         }
     }
@@ -205,9 +201,7 @@ def test_timeout_over_hour_warns() -> None:
     cfg = {
         "hooks": {
             "PreToolUse": [
-                {
-                    "hooks": [{"type": "command", "command": "echo x", "timeout": 7200}]
-                }
+                {"hooks": [{"type": "command", "command": "echo x", "timeout": 7200}]}
             ]
         }
     }
@@ -232,3 +226,155 @@ def test_severity_split() -> None:
     cfg = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{}]}]}}
     result = validate_hooks_source(json.dumps(cfg))
     assert all(i.severity is Severity.ERROR for i in result.errors)
+
+
+def test_validate_settings_file_alias(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps(_minimal()))
+    result = validate_settings_file(p)
+    assert result.ok
+
+
+def test_validate_settings_file_detects_errors(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": "Bash"}]}}))
+    result = validate_settings_file(p)
+    assert "E052" in _codes(result.errors)
+
+
+def test_hooks_not_object_errors() -> None:
+    result = validate_hooks_source(json.dumps({"hooks": []}))
+    assert "E010" in _codes(result.errors)
+
+
+def test_matcher_block_not_object() -> None:
+    cfg = {"hooks": {"PreToolUse": ["not-an-object"]}}
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E050" in _codes(result.errors)
+
+
+def test_matcher_not_a_string() -> None:
+    cfg = {
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": 123, "hooks": [{"type": "command", "command": "echo x"}]}
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E051" in _codes(result.errors)
+
+
+def test_hooks_not_an_array() -> None:
+    cfg = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": "echo"}]}}
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E053" in _codes(result.errors)
+
+
+def test_empty_hooks_array_warns() -> None:
+    cfg = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "W054" in _codes(result.warnings)
+
+
+def test_event_with_no_matcher_blocks_warns() -> None:
+    cfg = {"hooks": {"PreToolUse": []}}
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "W022" in _codes(result.warnings)
+
+
+def test_hook_entry_not_object() -> None:
+    cfg = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ["echo"]}]}}
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E101" in _codes(result.errors)
+
+
+def test_unknown_hook_type_reported() -> None:
+    cfg = {
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "webhook"}]}]}
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E103" in _codes(result.errors)
+
+
+def test_anthropic_key_secret_flagged() -> None:
+    cfg = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "ANTHROPIC_API_KEY=sk-ant-api03-"
+                            + "a" * 40
+                            + " run",
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E201" in _codes(result.errors)
+
+
+def test_aws_key_secret_flagged() -> None:
+    cfg = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": "aws s3 ls AKIAIOSFODNN7EXAMPLE"}
+                    ]
+                }
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E201" in _codes(result.errors)
+
+
+def test_dd_disk_wipe_flagged() -> None:
+    cfg = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": "dd if=/dev/zero of=/dev/sda"}
+                    ]
+                }
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E200" in _codes(result.errors)
+
+
+def test_fork_bomb_flagged() -> None:
+    cfg = {
+        "hooks": {
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": ":(){ :|:& };:"}]}
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert "E200" in _codes(result.errors)
+
+
+def test_clean_command_has_no_issues() -> None:
+    cfg = {
+        "hooks": {
+            "PostToolUse": [
+                {
+                    "matcher": "Edit",
+                    "hooks": [
+                        {"type": "command", "command": "prettier -w .", "timeout": 30}
+                    ],
+                }
+            ]
+        }
+    }
+    result = validate_hooks_source(json.dumps(cfg))
+    assert result.ok
+    assert result.issues == []

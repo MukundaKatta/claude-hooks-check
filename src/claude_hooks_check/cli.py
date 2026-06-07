@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -61,7 +60,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.quiet:
         filtered = [
-            ValidationResult(path=r.path, issues=list(r.errors)) for r in results if r.errors
+            ValidationResult(path=r.path, issues=list(r.errors))
+            for r in results
+            if r.errors
         ]
         if filtered:
             print(_format_human(filtered))

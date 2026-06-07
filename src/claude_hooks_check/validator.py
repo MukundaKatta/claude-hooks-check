@@ -97,11 +97,15 @@ class ValidationResult:
         return [i for i in self.issues if i.severity is Severity.WARNING]
 
 
-def _err(code: str, msg: str, event: str | None = None, matcher: str | None = None) -> Issue:
+def _err(
+    code: str, msg: str, event: str | None = None, matcher: str | None = None
+) -> Issue:
     return Issue(Severity.ERROR, code, msg, event, matcher)
 
 
-def _warn(code: str, msg: str, event: str | None = None, matcher: str | None = None) -> Issue:
+def _warn(
+    code: str, msg: str, event: str | None = None, matcher: str | None = None
+) -> Issue:
     return Issue(Severity.WARNING, code, msg, event, matcher)
 
 
@@ -109,11 +113,23 @@ def _check_command(cmd: str, event: str, matcher: str) -> list[Issue]:
     out: list[Issue] = []
     for label, pat in DANGEROUS_PATTERNS:
         if pat.search(cmd):
-            out.append(_err("E200", f"dangerous command pattern detected: {label}", event, matcher))
+            out.append(
+                _err(
+                    "E200",
+                    f"dangerous command pattern detected: {label}",
+                    event,
+                    matcher,
+                )
+            )
     for label, pat in SECRET_PATTERNS:
         if pat.search(cmd):
             out.append(
-                _err("E201", f"possible {label} hardcoded in hook command", event, matcher)
+                _err(
+                    "E201",
+                    f"possible {label} hardcoded in hook command",
+                    event,
+                    matcher,
+                )
             )
     return out
 
@@ -140,7 +156,12 @@ def _check_hook_entry(hook: Any, event: str, matcher: str) -> list[Issue]:
         cmd = hook.get("command")
         if not isinstance(cmd, str) or not cmd.strip():
             issues.append(
-                _err("E104", "'command' must be a non-empty string for a command hook", event, matcher)
+                _err(
+                    "E104",
+                    "'command' must be a non-empty string for a command hook",
+                    event,
+                    matcher,
+                )
             )
         else:
             issues.extend(_check_command(cmd, event, matcher))
@@ -148,7 +169,14 @@ def _check_hook_entry(hook: Any, event: str, matcher: str) -> list[Issue]:
     if "timeout" in hook:
         t = hook["timeout"]
         if not (isinstance(t, int) and not isinstance(t, bool) and t > 0):
-            issues.append(_err("E105", "'timeout' must be a positive integer (seconds)", event, matcher))
+            issues.append(
+                _err(
+                    "E105",
+                    "'timeout' must be a positive integer (seconds)",
+                    event,
+                    matcher,
+                )
+            )
         elif t > 3600:
             issues.append(
                 _warn(
@@ -174,13 +202,19 @@ def _check_matcher_block(mb: Any, event: str) -> list[Issue]:
 
     hooks = mb.get("hooks")
     if hooks is None:
-        issues.append(_err("E052", "matcher block missing 'hooks' array", event, matcher_label))
+        issues.append(
+            _err("E052", "matcher block missing 'hooks' array", event, matcher_label)
+        )
         return issues
     if not isinstance(hooks, list):
         issues.append(_err("E053", "'hooks' must be an array", event, matcher_label))
         return issues
     if not hooks:
-        issues.append(_warn("W054", "matcher block has an empty 'hooks' array", event, matcher_label))
+        issues.append(
+            _warn(
+                "W054", "matcher block has an empty 'hooks' array", event, matcher_label
+            )
+        )
 
     for h in hooks:
         issues.extend(_check_hook_entry(h, event, matcher_label))
@@ -202,11 +236,17 @@ def _check_hooks_block(hooks: Any) -> list[Issue]:
             issues.append(_warn("W020", f"unknown event name '{event}'"))
         if not isinstance(value, list):
             issues.append(
-                _err("E021", f"event '{event}' must map to an array of matcher blocks", event)
+                _err(
+                    "E021",
+                    f"event '{event}' must map to an array of matcher blocks",
+                    event,
+                )
             )
             continue
         if not value:
-            issues.append(_warn("W022", f"event '{event}' has no matcher blocks", event))
+            issues.append(
+                _warn("W022", f"event '{event}' has no matcher blocks", event)
+            )
             continue
         for mb in value:
             issues.extend(_check_matcher_block(mb, event))
